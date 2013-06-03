@@ -16,7 +16,6 @@ export USER=`whoami`
 export OLDMODULES=`find -name *.ko`
 
 # system compiler
-# gcc 4.7.2 (Linaro 13.05)
 export CROSS_COMPILE=${KERNELDIR}/android-toolchain-eabi/bin/arm-eabi-
 
 CPUS=`grep 'processor' /proc/cpuinfo | wc -l`
