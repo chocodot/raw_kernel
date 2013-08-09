@@ -35,7 +35,6 @@ fi;
 # remove previous zImage files
 if [ -e ${KERNELDIR}/zImage ]; then
 	rm ${KERNELDIR}/zImage
-	rm ${KERNELDIR}/boot.img
 fi;
 if [ -e ${KERNELDIR}/arch/arm/boot/zImage ]; then
 	rm ${KERNELDIR}/arch/arm/boot/zImage

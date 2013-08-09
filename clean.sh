@@ -5,6 +5,7 @@ rm -f out/boot.img;
 rm -f boot.img;
 rm -f out/system/lib/modules/*;
 rm -f out/NX-Kernel_*;
+rm -f .config;
 
 JUNK=`find . -name *.rej`;
 for i in $JUNK; do
