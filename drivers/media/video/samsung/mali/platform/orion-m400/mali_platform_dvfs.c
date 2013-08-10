@@ -84,19 +84,19 @@ mali_dvfs_table mali_dvfs[MALI_DVFS_STEPS]={
 
 #define ASV_8_LEVEL 8
 #define ASV_5_LEVEL 5
-#define ASV_LEVEL_SUPPORT 0
+#define ASV_LEVEL_SUPPORT 1 // use 5-level table
 
 static unsigned int asv_3d_volt_5_table[ASV_5_LEVEL][MALI_DVFS_STEPS] = {
-	/* L3 (134MHz) L2(200MHz), L1(267MHz) */
+	/* L3 (134MHz), L2(200MHz), L1(267MHz) */
 	{1000000, 1000000, 1100000},	/* S */
 	{1000000, 1000000, 1100000},	/* A */
-	{ 950000,  950000, 1000000},	/* B */
+	{ 800000,  850000,  900000},	/* B */
 	{ 950000,  950000, 1000000},	/* C */
 	{ 950000,  950000,  950000},	/* D */
 };
 
 static unsigned int asv_3d_volt_8_table[ASV_8_LEVEL][MALI_DVFS_STEPS] = {
-	/* L3 (134MHz) L2(200MHz), L1(267MHz) */
+	/* L3 (134MHz), L2(200MHz), L1(267MHz) */
 	{1000000, 1000000, 1100000},	/* SS */
 	{1000000, 1000000, 1100000},	/* A1 */
 	{1000000, 1000000, 1100000},	/* A2 */
