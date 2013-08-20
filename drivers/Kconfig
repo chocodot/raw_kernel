@@ -58,6 +58,8 @@ source "drivers/ptp/Kconfig"
 
 source "drivers/gpio/Kconfig"
 
+source "drivers/gpu/arm/Kconfig"
+
 source "drivers/w1/Kconfig"
 
 source "drivers/battery/Kconfig"
