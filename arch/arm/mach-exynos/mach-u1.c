@@ -8185,6 +8185,8 @@ static void __init smdkc210_machine_init(void)
 				  800 * MHZ);
 #endif
 
+    max8997_muic_jig_uart_cb(UART_PATH_AP);
+
 #ifdef CONFIG_S3C64XX_DEV_SPI
 	sclk = clk_get(spi0_dev, "dout_spi0");
 	if (IS_ERR(sclk))
