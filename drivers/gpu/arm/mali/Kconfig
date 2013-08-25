@@ -41,5 +41,5 @@ config MALI_DVFS
 	bool "MALI DVFS"
 	depends on MALI400 && REGULATOR
 	default y
-	help
+	---help---
 	  This enables Mali driver DVFS.
