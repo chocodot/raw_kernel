@@ -143,26 +143,12 @@ ccflags-y += -I$(src) -I$(src)/include -I$(src)/common -I$(src)/linux -I$(src)/p
 # Get subversion revision number, fall back to only ${MALI_RELEASE_NAME} if no svn info is available
 MALI_RELEASE_NAME=$(shell cat $(src)/.version 2> /dev/null)
 
-SVN_INFO = (cd $(src); (svn info || git svn info || \
-	echo -e "\nURL: $(MALI_RELEASE_NAME)\n" \
-	"Last Changed Rev: $(MALI_RELEASE_NAME)\n" \
-	"Last Changed Date: $(MALI_RELEASE_NAME)") 2>/dev/null)
-
-SVN_REV := $(shell (cd $(src); echo "$(SVN_INFO)" | grep '^Revision: '| sed -e 's/^Revision: //' ) 2>/dev/null )
-ifeq ($(SVN_REV),)
-SVN_REV := $(MALI_RELEASE_NAME)
-else
-SVN_REV := $(MALI_RELEASE_NAME)-r$(SVN_REV)
-endif
-
-ccflags-y += -DSVN_REV_STRING=\"$(SVN_REV)\"
-
 VERSION_STRINGS :=
 VERSION_STRINGS += API_VERSION=$(shell cd $(src); grep "\#define _MALI_API_VERSION" $(FILES_PREFIX)include/linux/mali/mali_utgard_uk_types.h | cut -d' ' -f 3 )
-VERSION_STRINGS += REPO_URL=$(shell $(SVN_INFO) | grep '^URL: ' | cut -d: -f2- | cut -b2-)
-VERSION_STRINGS += REVISION=$(SVN_REV)
-VERSION_STRINGS += CHANGED_REVISION=$(shell $(SVN_INFO) | grep '^Last Changed Rev: ' | cut -d: -f2- | cut -b2-)
-VERSION_STRINGS += CHANGE_DATE=$(shell $(SVN_INFO) | grep '^Last Changed Date: ' | cut -d: -f2- | cut -b2-)
+VERSION_STRINGS += REPO_URL=
+VERSION_STRINGS += REVISION=
+VERSION_STRINGS += CHANGED_REVISION=
+VERSION_STRINGS += CHANGE_DATE=
 VERSION_STRINGS += BUILD_DATE=$(shell date)
 ifdef CONFIG_MALI400_DEBUG
 VERSION_STRINGS += BUILD=debug

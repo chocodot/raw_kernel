@@ -124,7 +124,7 @@ static int ump_initialize_module(void)
 		return map_errcode(err);
 	}
 
-	MSG(("UMP device driver %s loaded\n", SVN_REV_STRING));
+	MSG(("UMP device driver loaded\n"));
 	return 0;
 }
 
@@ -460,4 +460,4 @@ module_exit(ump_cleanup_module);
 /* And some module informatio */
 MODULE_LICENSE(UMP_KERNEL_LINUX_LICENSE);
 MODULE_AUTHOR("ARM Ltd.");
-MODULE_VERSION(SVN_REV_STRING);
+MODULE_VERSION("r3p2");
