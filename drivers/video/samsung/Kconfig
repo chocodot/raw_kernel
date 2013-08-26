@@ -7,9 +7,9 @@ config FB_S5P
 	select FB_CFB_FILLRECT
 	select FB_CFB_COPYAREA
 	select FB_CFB_IMAGEBLIT
-	select SYNC
-	select SW_SYNC
-	select SW_SYNC_USER
+	#select SYNC
+	#select SW_SYNC
+	#select SW_SYNC_USER
 	depends on FB && (ARCH_S5PV210 || ARCH_EXYNOS4) && !FB_S3C
 	default n
 	help
