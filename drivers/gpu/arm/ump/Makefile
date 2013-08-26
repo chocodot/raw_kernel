@@ -8,9 +8,8 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #
 
-ifeq ($(CONFIG_USING_OS_MEMORY),y)
+# 0: dedicated memory, 1: OS memory
 USING_MEMORY_TYPE=1
-endif
 
 UMP_FILE_PREFIX = 
 UDD_FILE_PREFIX := drivers/gpu/arm/ump/
