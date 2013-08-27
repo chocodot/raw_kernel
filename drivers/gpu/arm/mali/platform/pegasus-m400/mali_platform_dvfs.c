@@ -37,6 +37,9 @@
 
 static int bMaliDvfsRun=0;
 
+static _mali_osk_atomic_t bottomlock_status;
+int bottom_lock_step = 0;
+
 typedef struct mali_dvfs_tableTag{
 	unsigned int clock;
 	unsigned int freq;
@@ -331,7 +334,12 @@ static unsigned int decideNextStatus(unsigned int utilization)
 			level--;
 		}
 	}
- 
+
+	if (_mali_osk_atomic_read(&bottomlock_status) > 0) {
+		if (level < bottom_lock_step)
+			level = bottom_lock_step;
+	}
+
 	return level;
 }
 
@@ -405,6 +413,8 @@ mali_bool init_mali_dvfs_status(int step)
 	if (!mali_dvfs_wq)
 		mali_dvfs_wq = create_singlethread_workqueue("mali_dvfs");
 
+    _mali_osk_atomic_init(&bottomlock_status, 0);
+
 	/*add a error handling here*/
 	set_mali_dvfs_current_step(step);
 
@@ -415,6 +425,9 @@ void deinit_mali_dvfs_status(void)
 {
 	if (mali_dvfs_wq)
 		destroy_workqueue(mali_dvfs_wq);
+
+	_mali_osk_atomic_term(&bottomlock_status);
+
 	mali_dvfs_wq = NULL;
 }
 
@@ -425,4 +438,37 @@ mali_bool mali_dvfs_handler(u32 utilization)
 
 	/*add error handle here*/
 	return MALI_TRUE;
+}
+
+int mali_dvfs_bottom_lock_push(int lock_step)
+{
+	int prev_status = _mali_osk_atomic_read(&bottomlock_status);
+
+	if (prev_status < 0) {
+		MALI_PRINT(("gpu bottom lock status is not valid for push\n"));
+		return -1;
+	}
+	if (bottom_lock_step < lock_step) {
+		bottom_lock_step = lock_step;
+		if (get_mali_dvfs_status() < lock_step) {
+			mali_regulator_set_voltage(mali_dvfs[lock_step].vol, mali_dvfs[lock_step].vol);
+			mali_clk_set_rate(mali_dvfs[lock_step].clock, mali_dvfs[lock_step].freq);
+			set_mali_dvfs_current_step(lock_step);
+		}
+	}
+	return _mali_osk_atomic_inc_return(&bottomlock_status);
+}
+
+int mali_dvfs_bottom_lock_pop(void)
+{
+	int prev_status = _mali_osk_atomic_read(&bottomlock_status);
+	if (prev_status <= 0) {
+		MALI_PRINT(("gpu bottom lock status is not valid for pop\n"));
+		return -1;
+	} else if (prev_status == 1) {
+		bottom_lock_step = 0;
+		MALI_PRINT(("gpu bottom lock release\n"));
+	}
+
+	return _mali_osk_atomic_dec_return(&bottomlock_status);
 }
