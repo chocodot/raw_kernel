@@ -29,26 +29,10 @@
 /*for mmu and os memory*/
 #define MEM_BASE_ADDR    0x40000000
 #define MEM_TOTAL_SIZE   0x40000000
-#define MEM_MALI_OS_SIZE 0x18000000
+#define MEM_MALI_OS_SIZE 0x40000000
 
 /*for dedicated memory*/
 #define MEM_MALI_SIZE 	 CONFIG_MALI_MEM_SIZE*1024*1024
-#define MEM_MALI_BASE    0x60000000 - MEM_MALI_SIZE 
-
-#define IRQ_SPI(x)              (x+32)
-#define IRQ_PPMMU0_3D           IRQ_SPI(118)
-#define IRQ_PPMMU1_3D           IRQ_SPI(119)
-#define IRQ_PPMMU2_3D           IRQ_SPI(120)
-#define IRQ_PPMMU3_3D           IRQ_SPI(121)
-#define IRQ_GPMMU_3D            IRQ_SPI(122)
-                
-#define IRQ_PP0_3D              IRQ_SPI(123)
-#define IRQ_PP1_3D              IRQ_SPI(124)
-#define IRQ_PP2_3D              IRQ_SPI(125)
-#define IRQ_PP3_3D              IRQ_SPI(126)
-#define IRQ_GP_3D               IRQ_SPI(127)
-#define IRQ_PMU_3D              IRQ_SPI(117)
-
-
+#define MEM_MALI_BASE    0x80000000 - MEM_MALI_SIZE
 
 #endif /* __ARCH_CONFIG_H__ */
