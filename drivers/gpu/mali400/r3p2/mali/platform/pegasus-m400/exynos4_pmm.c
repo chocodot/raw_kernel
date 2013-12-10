@@ -175,7 +175,7 @@ static unsigned int asv_3d_volt_4210_12_table[MALI_DVFS_STEPS][ASV_LEVEL_4210_12
 };
 
 static unsigned int asv_3d_volt_4210_14_table[MALI_DVFS_STEPS][ASV_LEVEL_4210_14] = {
-	{  1000000,  1000000,   950000,   950000,   950000},	/* L2(134Mhz) */
+	{  1000000,  1000000,   900000,   950000,   950000},	/* L2(134Mhz) */
 #if (MALI_DVFS_STEPS > 1)
 	{  1000000,  1000000,   950000,   950000,   950000},	/* L1(200Mhz) */
 #if (MALI_DVFS_STEPS > 2)
