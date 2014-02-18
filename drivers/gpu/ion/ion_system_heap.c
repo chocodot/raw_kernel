@@ -80,8 +80,7 @@ static struct page *alloc_buffer_page(struct ion_system_heap *heap,
 			return 0;
 	
 	dma_addr_t dma_addr = pfn_to_dma(NULL, page_to_pfn(page));
-	struct dma_map_ops *dma_ops = get_dma_ops(NULL);
-	dma_ops->sync_single_for_device(NULL, dma_addr, PAGE_SIZE << order, DMA_BIDIRECTIONAL);
+	dma_sync_single_for_device(NULL, dma_addr, PAGE_SIZE << order, DMA_BIDIRECTIONAL);
 	}
 	if (!page)
 		return 0;

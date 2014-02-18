@@ -40,11 +40,10 @@ static void *ion_page_pool_alloc_pages(struct ion_page_pool *pool)
 	if (!page)
 		return NULL;
 	dma_addr_t dma_addr = pfn_to_dma(NULL, page_to_pfn(page));
-	struct dma_map_ops *dma_ops = get_dma_ops(NULL);
 	/* this is only being used to flush the page for dma,
 	   this api is not really suitable for calling from a driver
 	   but no better way to flush a page for dma exist at this time */
-	dma_ops->sync_single_for_device(NULL, dma_addr, PAGE_SIZE << pool->order, DMA_BIDIRECTIONAL);
+	dma_sync_single_for_device(NULL, dma_addr, PAGE_SIZE << pool->order, DMA_BIDIRECTIONAL);
 	return page;
 }
 
