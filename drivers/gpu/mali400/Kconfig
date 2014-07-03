@@ -1,13 +1,2 @@
-menuconfig MALI400
-	tristate "Mali-300/400/450 support"
-	depends on ARM
-	default y
-	---help---
-	This enables support for the ARM Mali-300, Mali-400, and Mali-450
-	GPUs.
-
-	To compile this driver as a module, choose M here: the module will be
-	called mali.
-
 source "drivers/gpu/mali400/r4p0/mali/Kconfig"
 source "drivers/gpu/mali400/r4p0/ump/Kconfig"

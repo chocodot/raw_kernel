@@ -17,7 +17,6 @@ MALI_PLATFORM-orion=exynos4
 MALI_PLATFORM-pegasus=exynos4
 # MALI_SEC 
 MALI_PLATFORM-pegasus-m400=pegasus-m400
-MALI_PLATFORM-exynos4270=exynos4270
 MALI_PLATFORM-tcc8900=tcc8900
 MALI_PLATFORM-pb11mp=arm
 MALI_PLATFORM-vea9=arm
