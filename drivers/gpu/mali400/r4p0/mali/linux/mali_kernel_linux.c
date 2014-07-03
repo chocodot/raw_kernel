@@ -1,11 +1,11 @@
 /**
- * Copyright (C) 2010-2012 ARM Limited. All rights reserved.
- * 
- * This program is free software and is provided to you under the terms of the GNU General Public License version 2
- * as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
- * 
- * A copy of the licence is included with the program, and can also be obtained from Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ * This confidential and proprietary software may be used only as
+ * authorised by a licensing agreement from ARM Limited
+ * (C) COPYRIGHT 2008-2013 ARM Limited
+ * ALL RIGHTS RESERVED
+ * The entire notice above must be reproduced on all authorised
+ * copies and copies may only be made to the extent permitted
+ * by a licensing agreement from ARM Limited.
  */
 
 /**
@@ -33,16 +33,13 @@
 #include "mali_kernel_sysfs.h"
 #include "mali_pm.h"
 #include "mali_kernel_license.h"
-#include "mali_dma_buf.h"
+#include "mali_memory.h"
+#include "mali_memory_dma_buf.h"
 #if defined(CONFIG_MALI400_INTERNAL_PROFILING)
 #include "mali_profiling_internal.h"
 #endif
 /* MALI_SEC */
-#if defined(CONFIG_CPU_EXYNOS4212) || defined(CONFIG_CPU_EXYNOS4412) || defined(CONFIG_CPU_EXYNOS4210)
 #include "../platform/pegasus-m400/exynos4_pmm.h"
-#elif defined(CONFIG_SOC_EXYNOS3470)
-#include "../platform/exynos4270/exynos4_pmm.h"
-#endif
 
 /* Streamline support for the Mali driver */
 #if defined(CONFIG_TRACEPOINTS) && defined(CONFIG_MALI400_PROFILING)
@@ -59,6 +56,7 @@ int mali_debug_level = 2;
 module_param(mali_debug_level, int, S_IRUSR | S_IWUSR | S_IWGRP | S_IRGRP | S_IROTH); /* rw-rw-r-- */
 MODULE_PARM_DESC(mali_debug_level, "Higher number, more dmesg output");
 
+extern int mali_max_job_runtime;
 module_param(mali_max_job_runtime, int, S_IRUSR | S_IWUSR | S_IWGRP | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(mali_max_job_runtime, "Maximum allowed job runtime in msecs.\nJobs will be killed after this no matter what");
 
@@ -92,12 +90,39 @@ extern int mali_max_pp_cores_group_2;
 module_param(mali_max_pp_cores_group_2, int, S_IRUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(mali_max_pp_cores_group_2, "Limit the number of PP cores to use from second PP group (Mali-450 only).");
 
+#if defined(CONFIG_MALI400_POWER_PERFORMANCE_POLICY)
+/** the max fps the same as display vsync default 60, can set by module insert parameter */
+extern int mali_max_system_fps;
+module_param(mali_max_system_fps, int, S_IRUSR | S_IWUSR | S_IWGRP | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(mali_max_system_fps, "Max system fps the same as display VSYNC.");
+
+/** a lower limit on their desired FPS default 58, can set by module insert parameter*/
+extern int mali_desired_fps;
+module_param(mali_desired_fps, int, S_IRUSR | S_IWUSR | S_IWGRP | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(mali_desired_fps, "A bit lower than max_system_fps which user desired fps");
+#endif
+
+#if MALI_ENABLE_CPU_CYCLES
+#include <linux/cpumask.h>
+#include <linux/timer.h>
+#include <asm/smp.h>
+static struct timer_list mali_init_cpu_clock_timers[8];
+static u32 mali_cpu_clock_last_value[8] = {0,};
+#endif
+
 /* Export symbols from common code: mali_user_settings.c */
 #include "mali_user_settings_db.h"
 EXPORT_SYMBOL(mali_set_user_setting);
 EXPORT_SYMBOL(mali_get_user_setting);
+#if defined(CONFIG_MALI_DVFS)
+/* MALI_SEC */
+extern int mali_dvfs_control;
+module_param(mali_dvfs_control, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP| S_IROTH); /* rw-rw-r-- */
+MODULE_PARM_DESC(mali_dvfs_control, "Mali Current DVFS");
 
-static char mali_dev_name[] = "mali"; /* should be const, but the functions we call requires non-cost */
+#endif
+
+static char mali_dev_name[] = "mali0"; /* should be const, but the functions we call requires non-cost */
 
 /* This driver only supports one Mali device, and this variable stores this single platform device */
 struct platform_device *mali_platform_device = NULL;
@@ -115,7 +140,6 @@ static long mali_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
 #else
 static int mali_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned long arg);
 #endif
-static int mali_mmap(struct file * filp, struct vm_area_struct * vma);
 
 static int mali_probe(struct platform_device *pdev);
 static int mali_remove(struct platform_device *pdev);
@@ -136,8 +160,7 @@ extern int mali_platform_device_unregister(void);
 
 /* Linux power management operations provided by the Mali device driver */
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,29))
-struct pm_ext_ops mali_dev_ext_pm_ops =
-{
+struct pm_ext_ops mali_dev_ext_pm_ops = {
 	.base =
 	{
 		.suspend = mali_driver_suspend_scheduler,
@@ -147,8 +170,7 @@ struct pm_ext_ops mali_dev_ext_pm_ops =
 	},
 };
 #else
-static const struct dev_pm_ops mali_dev_pm_ops =
-{
+static const struct dev_pm_ops mali_dev_pm_ops = {
 #ifdef CONFIG_PM_RUNTIME
 	.runtime_suspend = mali_driver_runtime_suspend,
 	.runtime_resume = mali_driver_runtime_resume,
@@ -158,12 +180,12 @@ static const struct dev_pm_ops mali_dev_pm_ops =
 	.resume = mali_driver_resume_scheduler,
 	.freeze = mali_driver_suspend_scheduler,
 	.thaw = mali_driver_resume_scheduler,
+	.poweroff = mali_driver_suspend_scheduler,
 };
 #endif
 
 /* The Mali device driver struct */
-static struct platform_driver mali_platform_driver =
-{
+static struct platform_driver mali_platform_driver = {
 	.probe  = mali_probe,
 	.remove = mali_remove,
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,29))
@@ -181,8 +203,7 @@ static struct platform_driver mali_platform_driver =
 };
 
 /* Linux misc device operations (/dev/mali) */
-struct file_operations mali_fops =
-{
+struct file_operations mali_fops = {
 	.owner = THIS_MODULE,
 	.open = mali_open,
 	.release = mali_release,
@@ -194,6 +215,128 @@ struct file_operations mali_fops =
 	.mmap = mali_mmap
 };
 
+#ifdef CONFIG_MALI_DVFS
+extern ssize_t show_time_in_state(struct device *dev, struct device_attribute *attr, char *buf);
+extern ssize_t set_time_in_state(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
+DEVICE_ATTR(time_in_state, S_IRUGO|S_IWUSR, show_time_in_state, set_time_in_state);
+#endif
+
+#if MALI_ENABLE_CPU_CYCLES
+void mali_init_cpu_time_counters(int reset, int enable_divide_by_64)
+{
+	/* The CPU assembly reference used is: ARM Architecture Reference Manual ARMv7-AR C.b */
+	u32 write_value;
+
+	/* See B4.1.116 PMCNTENSET, Performance Monitors Count Enable Set register, VMSA */
+	/* setting p15 c9 c12 1 to 0x8000000f==CPU_CYCLE_ENABLE |EVENT_3_ENABLE|EVENT_2_ENABLE|EVENT_1_ENABLE|EVENT_0_ENABLE */
+	asm volatile("mcr p15, 0, %0, c9, c12, 1" :: "r"(0x8000000f));
+
+
+	/* See B4.1.117 PMCR, Performance Monitors Control Register. Writing to p15, c9, c12, 0 */
+	write_value = 1<<0; /* Bit 0 set. Enable counters */
+	if (reset) {
+		write_value |= 1<<1; /* Reset event counters */
+		write_value |= 1<<2; /* Reset cycle counter  */
+	}
+	if (enable_divide_by_64) {
+		write_value |= 1<<3; /* Enable the Clock divider by 64 */
+	}
+	write_value |= 1<<4; /* Export enable. Not needed */
+	asm volatile ("MCR p15, 0, %0, c9, c12, 0\t\n" :: "r"(write_value ));
+
+	/* PMOVSR Overflow Flag Status Register - Clear Clock and Event overflows */
+	asm volatile ("MCR p15, 0, %0, c9, c12, 3\t\n" :: "r"(0x8000000f));
+
+
+	/* See B4.1.124 PMUSERENR - setting p15 c9 c14 to 1" */
+	/* User mode access to the Performance Monitors enabled. */
+	/* Lets User space read cpu clock cycles */
+	asm volatile( "mcr p15, 0, %0, c9, c14, 0" :: "r"(1) );
+}
+
+/** A timer function that configures the cycle clock counter on current CPU.
+	The function \a mali_init_cpu_time_counters_on_all_cpus sets up this function
+	to trigger on all Cpus during module load. */
+static void mali_init_cpu_clock_timer_func(unsigned long data)
+{
+	int reset_counters, enable_divide_clock_counter_by_64;
+	int current_cpu = raw_smp_processor_id();
+	unsigned int sample0;
+	unsigned int sample1;
+
+	MALI_IGNORE(data);
+
+	reset_counters= 1;
+	enable_divide_clock_counter_by_64 = 0;
+	mali_init_cpu_time_counters(reset_counters, enable_divide_clock_counter_by_64);
+
+	sample0 = mali_get_cpu_cyclecount();
+	sample1 = mali_get_cpu_cyclecount();
+
+	MALI_DEBUG_PRINT(3, ("Init Cpu %d cycle counter- First two samples: %08x %08x \n", current_cpu, sample0, sample1));
+}
+
+/** A timer functions for storing current time on all cpus.
+    Used for checking if the clocks have similar values or if they are drifting. */
+static void mali_print_cpu_clock_timer_func(unsigned long data)
+{
+	int current_cpu = raw_smp_processor_id();
+	unsigned int sample0;
+
+	MALI_IGNORE(data);
+	sample0 = mali_get_cpu_cyclecount();
+	if ( current_cpu<8 ) {
+		mali_cpu_clock_last_value[current_cpu] = sample0;
+	}
+}
+
+/** Init the performance registers on all CPUs to count clock cycles.
+	For init \a print_only should be 0.
+    If \a print_only is 1, it will intead print the current clock value of all CPUs.*/
+void mali_init_cpu_time_counters_on_all_cpus(int print_only)
+{
+	int i = 0;
+	int cpu_number;
+	int jiffies_trigger;
+	int jiffies_wait;
+
+	jiffies_wait = 2;
+	jiffies_trigger = jiffies + jiffies_wait;
+
+	for ( i=0 ; i < 8 ; i++ ) {
+		init_timer(&mali_init_cpu_clock_timers[i]);
+		if (print_only) mali_init_cpu_clock_timers[i].function = mali_print_cpu_clock_timer_func;
+		else            mali_init_cpu_clock_timers[i].function = mali_init_cpu_clock_timer_func;
+		mali_init_cpu_clock_timers[i].expires = jiffies_trigger ;
+	}
+	cpu_number = cpumask_first(cpu_online_mask);
+	for ( i=0 ; i < 8 ; i++ ) {
+		int next_cpu;
+		add_timer_on(&mali_init_cpu_clock_timers[i], cpu_number);
+		next_cpu = cpumask_next(cpu_number, cpu_online_mask);
+		if (next_cpu >= nr_cpu_ids) break;
+		cpu_number = next_cpu;
+	}
+
+	while (jiffies_wait) jiffies_wait= schedule_timeout_uninterruptible(jiffies_wait);
+
+	for ( i=0 ; i < 8 ; i++ ) {
+		del_timer_sync(&mali_init_cpu_clock_timers[i]);
+	}
+
+	if (print_only) {
+		if ( (0==mali_cpu_clock_last_value[2]) &&  (0==mali_cpu_clock_last_value[3]) ) {
+			/* Diff can be printed if we want to check if the clocks are in sync
+			int diff = mali_cpu_clock_last_value[0] - mali_cpu_clock_last_value[1];*/
+			MALI_DEBUG_PRINT(2, ("CPU cycle counters readout all: %08x %08x\n", mali_cpu_clock_last_value[0], mali_cpu_clock_last_value[1]));
+		} else {
+			MALI_DEBUG_PRINT(2, ("CPU cycle counters readout all: %08x %08x %08x %08x\n", mali_cpu_clock_last_value[0], mali_cpu_clock_last_value[1], mali_cpu_clock_last_value[2], mali_cpu_clock_last_value[3] ));
+		}
+	}
+}
+#endif
+
+
 int mali_module_init(void)
 {
 	int err = 0;
@@ -202,14 +345,18 @@ int mali_module_init(void)
 	MALI_DEBUG_PRINT(2, ("Compiled: %s, time: %s.\n", __DATE__, __TIME__));
 	MALI_DEBUG_PRINT(2, ("Driver revision: %s\n", SVN_REV_STRING));
 
-	/* Initialize module wide settings */
-	mali_osk_low_level_mem_init();
+#if MALI_ENABLE_CPU_CYCLES
+	mali_init_cpu_time_counters_on_all_cpus(0);
+	MALI_DEBUG_PRINT(2, ("CPU cycle counter setup complete\n"));
+	/* Printing the current cpu counters */
+	mali_init_cpu_time_counters_on_all_cpus(1);
+#endif
 
+	/* Initialize module wide settings */
 #if defined(MALI_FAKE_PLATFORM_DEVICE)
 	MALI_DEBUG_PRINT(2, ("mali_module_init() registering device\n"));
 	err = mali_platform_device_register();
-	if (0 != err)
-	{
+	if (0 != err) {
 		return err;
 	}
 #endif
@@ -218,8 +365,7 @@ int mali_module_init(void)
 
 	err = platform_driver_register(&mali_platform_driver);
 
-	if (0 != err)
-	{
+	if (0 != err) {
 		MALI_DEBUG_PRINT(2, ("mali_module_init() Failed to register driver (%d)\n", err));
 #if defined(MALI_FAKE_PLATFORM_DEVICE)
 		mali_platform_device_unregister();
@@ -230,8 +376,7 @@ int mali_module_init(void)
 
 #if defined(CONFIG_MALI400_INTERNAL_PROFILING)
         err = _mali_internal_profiling_init(mali_boot_profiling ? MALI_TRUE : MALI_FALSE);
-        if (0 != err)
-        {
+	if (0 != err) {
                 /* No biggie if we wheren't able to initialize the profiling */
                 MALI_PRINT_ERROR(("Failed to initialize profiling, feature will be unavailable\n"));
         }
@@ -259,8 +404,6 @@ void mali_module_exit(void)
 	mali_platform_device_unregister();
 #endif
 
-	mali_osk_low_level_mem_term();
-
 	MALI_PRINT(("Mali device driver unloaded\n"));
 }
 
@@ -270,45 +413,40 @@ static int mali_probe(struct platform_device *pdev)
 
 	MALI_DEBUG_PRINT(2, ("mali_probe(): Called for platform device %s\n", pdev->name));
 
-	if (NULL != mali_platform_device)
-	{
+	if (NULL != mali_platform_device) {
 		/* Already connected to a device, return error */
 		MALI_PRINT_ERROR(("mali_probe(): The Mali driver is already connected with a Mali device."));
 		return -EEXIST;
 	}
 
+#ifdef CONFIG_MALI_DVFS
+	if (device_create_file(&pdev->dev, &dev_attr_time_in_state)) {
+		dev_err(&pdev->dev, "Couldn't create sysfs file [time_in_state]\n");
+	}
+#endif
+
 	mali_platform_device = pdev;
 
-	if (_MALI_OSK_ERR_OK == _mali_osk_wq_init())
-	{
+	if (_MALI_OSK_ERR_OK == _mali_osk_wq_init()) {
 		/* Initialize the Mali GPU HW specified by pdev */
-		if (_MALI_OSK_ERR_OK == mali_initialize_subsystems())
-		{
+		if (_MALI_OSK_ERR_OK == mali_initialize_subsystems()) {
 			/* Register a misc device (so we are accessible from user space) */
 			err = mali_miscdevice_register(pdev);
-			if (0 == err)
-			{
+			if (0 == err) {
 				/* Setup sysfs entries */
 				err = mali_sysfs_register(mali_dev_name);
-				if (0 == err)
-				{
+				if (0 == err) {
 					MALI_DEBUG_PRINT(2, ("mali_probe(): Successfully initialized driver for platform device %s\n", pdev->name));
 					return 0;
-				}
-				else
-				{
+				} else {
 					MALI_PRINT_ERROR(("mali_probe(): failed to register sysfs entries"));
 				}
 				mali_miscdevice_unregister();
-			}
-			else
-			{
+			} else {
 				MALI_PRINT_ERROR(("mali_probe(): failed to register Mali misc device."));
 			}
 			mali_terminate_subsystems();
-		}
-		else
-		{
+		} else {
 			MALI_PRINT_ERROR(("mali_probe(): Failed to initialize Mali device driver."));
 		}
 		_mali_osk_wq_term();
@@ -339,8 +477,7 @@ static int mali_miscdevice_register(struct platform_device *pdev)
 	mali_miscdevice.parent = get_device(&pdev->dev);
 
 	err = misc_register(&mali_miscdevice);
-	if (0 != err)
-	{
+	if (0 != err) {
 		MALI_PRINT_ERROR(("Failed to register misc device, misc_register() returned %d\n", err));
 	}
 
@@ -392,54 +529,13 @@ static int mali_driver_runtime_idle(struct device *dev)
 }
 #endif
 
-/** @note munmap handler is done by vma close handler */
-static int mali_mmap(struct file * filp, struct vm_area_struct * vma)
-{
-	struct mali_session_data * session_data;
-	_mali_uk_mem_mmap_s args = {0, };
-
-    session_data = (struct mali_session_data *)filp->private_data;
-	if (NULL == session_data)
-	{
-		MALI_PRINT_ERROR(("mmap called without any session data available\n"));
-		return -EFAULT;
-	}
-
-	MALI_DEBUG_PRINT(4, ("MMap() handler: start=0x%08X, phys=0x%08X, size=0x%08X vma->flags 0x%08x\n", (unsigned int)vma->vm_start, (unsigned int)(vma->vm_pgoff << PAGE_SHIFT), (unsigned int)(vma->vm_end - vma->vm_start), vma->vm_flags));
-
-	/* Re-pack the arguments that mmap() packed for us */
-	args.ctx = session_data;
-	args.phys_addr = vma->vm_pgoff << PAGE_SHIFT;
-	args.size = vma->vm_end - vma->vm_start;
-	args.ukk_private = vma;
-
-	if ( VM_SHARED== (VM_SHARED  & vma->vm_flags))
-	{
-		args.cache_settings = MALI_CACHE_STANDARD ;
-		MALI_DEBUG_PRINT(3,("Allocate - Standard - Size: %d kb\n", args.size/1024));
-	}
-	else
-	{
-		args.cache_settings = MALI_CACHE_GP_READ_ALLOCATE;
-		MALI_DEBUG_PRINT(3,("Allocate - GP Cached - Size: %d kb\n", args.size/1024));
-	}
-	/* Setting it equal to VM_SHARED and not Private, which would have made the later io_remap fail for MALI_CACHE_GP_READ_ALLOCATE */
-	vma->vm_flags = 0x000000fb;
-
-	/* Call the common mmap handler */
-	MALI_CHECK(_MALI_OSK_ERR_OK ==_mali_ukk_mem_mmap( &args ), -EFAULT);
-
-    return 0;
-}
-
 static int mali_open(struct inode *inode, struct file *filp)
 {
 	struct mali_session_data * session_data;
     _mali_osk_errcode_t err;
 
 	/* input validation */
-	if (mali_miscdevice.minor != iminor(inode))
-	{
+	if (mali_miscdevice.minor != iminor(inode)) {
 		MALI_PRINT_ERROR(("mali_open() Minor does not match\n"));
 		return -ENODEV;
 	}
@@ -462,8 +558,7 @@ static int mali_release(struct inode *inode, struct file *filp)
     _mali_osk_errcode_t err;
 
 	/* input validation */
-	if (mali_miscdevice.minor != iminor(inode))
-	{
+	if (mali_miscdevice.minor != iminor(inode)) {
 		MALI_PRINT_ERROR(("mali_release() Minor does not match\n"));
 		return -ENODEV;
 	}
@@ -476,17 +571,25 @@ static int mali_release(struct inode *inode, struct file *filp)
 
 int map_errcode( _mali_osk_errcode_t err )
 {
-    switch(err)
-    {
-        case _MALI_OSK_ERR_OK : return 0;
-        case _MALI_OSK_ERR_FAULT: return -EFAULT;
-        case _MALI_OSK_ERR_INVALID_FUNC: return -ENOTTY;
-        case _MALI_OSK_ERR_INVALID_ARGS: return -EINVAL;
-        case _MALI_OSK_ERR_NOMEM: return -ENOMEM;
-        case _MALI_OSK_ERR_TIMEOUT: return -ETIMEDOUT;
-        case _MALI_OSK_ERR_RESTARTSYSCALL: return -ERESTARTSYS;
-        case _MALI_OSK_ERR_ITEM_NOT_FOUND: return -ENOENT;
-        default: return -EFAULT;
+	switch(err) {
+	case _MALI_OSK_ERR_OK :
+		return 0;
+	case _MALI_OSK_ERR_FAULT:
+		return -EFAULT;
+	case _MALI_OSK_ERR_INVALID_FUNC:
+		return -ENOTTY;
+	case _MALI_OSK_ERR_INVALID_ARGS:
+		return -EINVAL;
+	case _MALI_OSK_ERR_NOMEM:
+		return -ENOMEM;
+	case _MALI_OSK_ERR_TIMEOUT:
+		return -ETIMEDOUT;
+	case _MALI_OSK_ERR_RESTARTSYSCALL:
+		return -ERESTARTSYS;
+	case _MALI_OSK_ERR_ITEM_NOT_FOUND:
+		return -ENOENT;
+	default:
+		return -EFAULT;
     }
 }
 
@@ -507,20 +610,17 @@ static int mali_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, 
 	MALI_DEBUG_PRINT(7, ("Ioctl received 0x%08X 0x%08lX\n", cmd, arg));
 
 	session_data = (struct mali_session_data *)filp->private_data;
-	if (NULL == session_data)
-	{
+	if (NULL == session_data) {
 		MALI_DEBUG_PRINT(7, ("filp->private_data was NULL\n"));
 		return -ENOTTY;
 	}
 
-	if (NULL == (void *)arg)
-	{
+	if (NULL == (void *)arg) {
 		MALI_DEBUG_PRINT(7, ("arg was NULL\n"));
 		return -ENOTTY;
 	}
 
-	switch(cmd)
-	{
+	switch(cmd) {
 		case MALI_IOC_WAIT_FOR_NOTIFICATION:
 			err = wait_for_notification_wrapper(session_data, (_mali_uk_wait_for_notification_s __user *)arg);
 			break;
@@ -535,6 +635,10 @@ static int mali_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, 
 
 		case MALI_IOC_GET_USER_SETTINGS:
 			err = get_user_settings_wrapper(session_data, (_mali_uk_get_user_settings_s __user *)arg);
+			break;
+
+		case MALI_IOC_REQUEST_HIGH_PRIORITY:
+			err = request_high_priority_wrapper(session_data, (_mali_uk_request_high_priority_s __user *)arg);
 			break;
 
 #if defined(CONFIG_MALI400_PROFILING)
@@ -581,14 +685,6 @@ static int mali_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, 
 			break;
 
 #endif
-
-		case MALI_IOC_MEM_INIT:
-			err = mem_init_wrapper(session_data, (_mali_uk_init_mem_s __user *)arg);
-			break;
-
-		case MALI_IOC_MEM_TERM:
-			err = mem_term_wrapper(session_data, (_mali_uk_term_mem_s __user *)arg);
-			break;
 
 		case MALI_IOC_MEM_WRITE_SAFE:
 			err = mem_write_safe_wrapper(session_data, (_mali_uk_mem_write_safe_s __user *)arg);
@@ -653,6 +749,10 @@ static int mali_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, 
 
 		case MALI_IOC_PP_START_JOB:
 			err = pp_start_job_wrapper(session_data, (_mali_uk_pp_start_job_s __user *)arg);
+		break;
+
+		case MALI_IOC_PP_AND_GP_START_JOB:
+			err = pp_and_gp_start_job_wrapper(session_data, (_mali_uk_pp_and_gp_start_job_s __user *)arg);
 			break;
 
 		case MALI_IOC_PP_NUMBER_OF_CORES_GET:
@@ -687,25 +787,27 @@ static int mali_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, 
 			err = vsync_event_report_wrapper(session_data, (_mali_uk_vsync_event_report_s __user *)arg);
 			break;
 
-		case MALI_IOC_STREAM_CREATE:
-#if defined(CONFIG_SYNC)
-			err = stream_create_wrapper(session_data, (_mali_uk_stream_create_s __user *)arg);
+		case MALI_IOC_TIMELINE_GET_LATEST_POINT:
+			err = timeline_get_latest_point_wrapper(session_data, (_mali_uk_timeline_get_latest_point_s __user *)arg);
 			break;
-#endif
-		case MALI_IOC_FENCE_CREATE_EMPTY:
-#if defined(CONFIG_SYNC)
-			err = sync_fence_create_empty_wrapper(session_data, (_mali_uk_fence_create_empty_s __user *)arg);
+		case MALI_IOC_TIMELINE_WAIT:
+			err = timeline_wait_wrapper(session_data, (_mali_uk_timeline_wait_s __user *)arg);
 			break;
-#endif
-		case MALI_IOC_FENCE_VALIDATE:
-#if defined(CONFIG_SYNC)
-			err = sync_fence_validate_wrapper(session_data, (_mali_uk_fence_validate_s __user *)arg);
+		case MALI_IOC_TIMELINE_CREATE_SYNC_FENCE:
+			err = timeline_create_sync_fence_wrapper(session_data, (_mali_uk_timeline_create_sync_fence_s __user *)arg);
 			break;
-#else
-			MALI_DEBUG_PRINT(2, ("Sync objects not supported\n"));
+		case MALI_IOC_SOFT_JOB_START:
+			err = soft_job_start_wrapper(session_data, (_mali_uk_soft_job_start_s __user *)arg);
+			break;
+		case MALI_IOC_SOFT_JOB_SIGNAL:
+			err = soft_job_signal_wrapper(session_data, (_mali_uk_soft_job_signal_s __user *)arg);
+			break;
+
+		case MALI_IOC_MEM_INIT: /* Fallthrough */
+		case MALI_IOC_MEM_TERM: /* Fallthrough */
+			MALI_DEBUG_PRINT(2, ("Deprecated ioctls called\n"));
 			err = -ENOTTY;
 			break;
-#endif
 
 		case MALI_IOC_MEM_GET_BIG_BLOCK: /* Fallthrough */
 		case MALI_IOC_MEM_FREE_BIG_BLOCK:
