@@ -35,6 +35,17 @@
 #include "ump_ukk_wrappers.h"
 #include "ump_ukk_ref_wrappers.h"
 
+/* MALI_SEC */
+#ifdef CONFIG_ION_EXYNOS
+#include <linux/ion.h>
+extern struct ion_device *ion_exynos;
+struct ion_client *ion_client_ump = NULL;
+#endif
+
+/* MALI_SEC */
+#if defined(CONFIG_MALI400)
+extern int map_errcode( _mali_osk_errcode_t err );
+#endif
 
 /* Module parameter to control log level */
 int ump_debug_level = 2;
@@ -47,7 +58,7 @@ module_param(ump_major, int, S_IRUGO); /* r--r--r-- */
 MODULE_PARM_DESC(ump_major, "Device major number");
 
 /* Name of the UMP device driver */
-static char ump_dev_name[] = "ion"; /* should be const, but the functions we call requires non-cost */
+static char ump_dev_name[] = "ump"; /* should be const, but the functions we call requires non-cost */
 
 
 #if UMP_LICENSE_IS_GPL
@@ -127,6 +138,12 @@ static int ump_initialize_module(void)
  */
 static void ump_cleanup_module(void)
 {
+/* MALI_SEC */
+#ifdef CONFIG_ION_EXYNOS
+	if (ion_client_ump)
+	    ion_client_destroy(ion_client_ump);
+#endif
+
 	DBG_MSG(2, ("Unloading UMP device driver\n"));
 	ump_kernel_destructor();
 	DBG_MSG(2, ("Module unloaded\n"));
@@ -318,7 +335,18 @@ static int ump_file_ioctl(struct inode *inode, struct file *filp, unsigned int c
 	case UMP_IOC_ALLOCATE :
 		err = ump_allocate_wrapper((u32 __user *)argument, session_data);
 		break;
-
+/* MALI_SEC */
+#ifdef CONFIG_ION_EXYNOS
+		case UMP_IOC_ION_IMPORT:
+			err = ump_ion_import_wrapper((u32 __user *)argument, session_data);
+			break;
+#endif
+#ifdef CONFIG_DMA_SHARED_BUFFER
+		case UMP_IOC_DMABUF_IMPORT:
+			err = ump_dmabuf_import_wrapper((u32 __user *)argument,
+							session_data);
+			break;
+#endif
 	case UMP_IOC_RELEASE:
 		err = ump_release_wrapper((u32 __user *)argument, session_data);
 		break;

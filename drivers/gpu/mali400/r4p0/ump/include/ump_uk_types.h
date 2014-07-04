@@ -48,6 +48,7 @@ typedef enum
 	_UMP_IOC_SWITCH_HW_USAGE,
 	_UMP_IOC_LOCK,
 	_UMP_IOC_UNLOCK,
+	_UMP_IOC_ION_IMPORT,
 } _ump_uk_functions;
 
 typedef enum
@@ -105,6 +106,15 @@ typedef struct _ump_uk_allocate_s
 	u32 size;                               /**< Input and output. Requested size; input. Returned size; output */
 	ump_uk_alloc_constraints constraints;   /**< Only input to Devicedriver */
 } _ump_uk_allocate_s;
+
+typedef struct _ump_uk_ion_import_s
+{
+	void *ctx;                              /**< [in,out] user-kernel context (trashed on output) */
+	int ion_fd;                             /**< ion_fd */
+	u32 secure_id;                          /**< Return value from DD to Userdriver */
+	u32 size;                               /**< Input and output. Requested size; input. Returned size; output */
+	ump_uk_alloc_constraints constraints;   /**< Only input to Devicedriver */
+} _ump_uk_ion_import_s;
 
 /**
  * SIZE_GET ([in] u32 secure_id, [out]size )

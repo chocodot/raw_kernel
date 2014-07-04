@@ -313,15 +313,34 @@ static void level1_cache_flush_all(void)
 void _ump_osk_msync( ump_dd_mem * mem, void * virt, u32 offset, u32 size, ump_uk_msync_op op, ump_session_data * session_data )
 {
 	int i;
+	/* MALI_SEC */
+	const void *start_v, *end_v;
 
 	/* Flush L1 using virtual address, the entire range in one go.
 	 * Only flush if user space process has a valid write mapping on given address. */
-	if( (mem) && (virt!=NULL) && (access_ok(VERIFY_WRITE, virt, size)) ) {
-		__cpuc_flush_dcache_area(virt, size);
-		DBG_MSG(3, ("UMP[%02u] Flushing CPU L1 Cache. CPU address: %x, size: %x\n", mem->secure_id, virt, size));
-	} else {
-		if (session_data) {
-			if (op == _UMP_UK_MSYNC_FLUSH_L1  ) {
+	if( (mem) && (virt!=NULL) && (access_ok(VERIFY_WRITE, virt, size)) )
+	{
+		/* MALI_SEC */
+		start_v = (void *)virt;
+		end_v   = (void *)(start_v + size - 1);
+		/*  There is no dmac_clean_range, so the L1 is always flushed,
+		 *  also for UMP_MSYNC_CLEAN. */
+		if (size >= SZ_64K)
+			flush_all_cpu_caches();
+		else
+			dmac_flush_range(start_v, end_v);
+
+		/* MALI ORIGINAL CODE */
+		//__cpuc_flush_dcache_area(virt, size);
+
+		DBG_MSG(3, ("UMP[%02u] Flushing CPU L1 Cache. Cpu address: %x-%x\n", mem->secure_id, start_v,end_v));
+	}
+	else
+	{
+		if (session_data)
+		{
+			if (op == _UMP_UK_MSYNC_FLUSH_L1  )
+			{
 				DBG_MSG(4, ("UMP Pending L1 cache flushes: %d\n", session_data->has_pending_level1_cache_flush));
 				session_data->has_pending_level1_cache_flush = 0;
 				level1_cache_flush_all();

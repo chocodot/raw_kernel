@@ -2,7 +2,6 @@ menuconfig MALI400
 	tristate "Mali-300/400/450 support"
 	default y
 	depends on ARM
-	select DMA_SHARED_BUFFER
 	---help---
 	  This enables support for the ARM Mali-300, Mali-400, and Mali-450
 	  GPUs.
