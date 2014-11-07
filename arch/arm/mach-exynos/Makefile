@@ -183,7 +183,7 @@ obj-$(CONFIG_MIDAS_COMMON)		+= sec-common.o\
 					   midas-mhl.o midas-sound.o \
 					   board-gps-bcm475x.o
 obj-$(CONFIG_FB_S5P)			+= board-lcd-rgb.o
-else
+endif
 ifeq ($(CONFIG_MACH_KONA),y)
 obj-$(CONFIG_MIDAS_COMMON)              += sec-common.o\
 					   midas-tsp.o board-midas-wlan.o \
