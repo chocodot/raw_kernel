@@ -150,7 +150,6 @@ struct s3cfb_global {
 	void __iomem		*regs_org;
 	void __iomem		*ielcd_regs;	/* to force upload Dump */
 	void __iomem		*dsim_regs;	/* to forcd upload Dump */
-	void			*data;
 	struct mutex		lock;
 	struct mutex		output_lock;
 	spinlock_t		slock;
