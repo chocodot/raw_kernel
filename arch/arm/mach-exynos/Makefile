@@ -121,7 +121,6 @@ obj-$(CONFIG_MACH_MIDAS)		+= mach-midas.o
 endif
 endif
 endif
-endif
 obj-$(CONFIG_MACH_SLP_MIDAS)		+= board-slp-midas.o midas-sensor.o
 obj-$(CONFIG_MACH_SLP_PQ)		+= board-slp-pq.o
 obj-$(CONFIG_MACH_REDWOOD)		+= board-redwood.o
