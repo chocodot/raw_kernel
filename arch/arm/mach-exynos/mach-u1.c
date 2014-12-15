@@ -6557,8 +6557,7 @@ static struct s3cfb_lcd s6e8aa0 = {
 	.p_height = 106,
 	.bpp = 24,
 
-	/* orig 57, max 62, but stay in line with other android devices */
-	.freq = 60,
+	.freq = 57,
 
 	/* minumun value is 0 except for wr_act time. */
 	.cpu_timing = {
